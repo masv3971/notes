@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trusted lists and OpenID Federation</title>
+<style>
+  :root {
+    --bg: #f6f8fc; --card: #ffffff; --ink: #0b1f3a; --muted: #5b6b82; --line: #c9d3e3;
+    --issuer: #0a66c2; --issuer-bg: #e6f0fb;
+    --holder: #0f8a5f; --holder-bg: #e1f5ec;
+    --verifier: #d9730d; --verifier-bg: #fdeeda;
+    --trust: #6b46c1; --trust-bg: #efe9fb;
+    --warn: #c0392b; --warn-bg: #fdeceb;
+    --font: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #000; color: var(--ink); font-family: var(--font); }
+  body { overflow: hidden; }
+  body.black .stage { visibility: hidden; }
+
+  .stage { position: absolute; left: 50%; top: 50%; width: 1920px; height: 1080px; background: var(--bg);
+    transform-origin: center center; overflow: hidden; }
+  .slide { position: absolute; inset: 0; display: none; flex-direction: column; padding: 84px 110px 70px; }
+  .slide.active { display: flex; }
+  .notes { display: none; }
+
+  .meta { position: absolute; top: 26px; left: 110px; right: 110px; display: flex; justify-content: space-between;
+    color: var(--muted); font-size: 22px; letter-spacing: .05em; text-transform: uppercase; }
+  img.logo { position: absolute; top: 10px; right: 110px; height: 66px; width: auto; }
+  .meta { right: 200px; }
+  .title-slide img.logo-big { height: 170px; width: auto; margin-bottom: 36px; }
+  .tag-s { color: #fff; background: var(--issuer); border-radius: 6px; padding: 1px 10px; margin-left: 10px; font-weight: 700; }
+  h1 { font-size: 62px; margin: 0 0 26px; line-height: 1.1; font-weight: 800; }
+  h1 .num { display: inline-block; min-width: 76px; text-align: center; margin-right: 18px; background: var(--ink); color: #fff;
+    border-radius: 14px; font-size: 48px; padding: 0 12px; }
+  h1 .num.x { background: var(--trust); }
+
+  .take { margin-top: auto; background: var(--ink); color: #fff; border-radius: 16px; padding: 20px 32px; font-size: 34px; line-height: 1.25; }
+  .take b { color: #ffb86b; font-size: 24px; letter-spacing: .08em; text-transform: uppercase; margin-right: 16px; }
+  .ask { background: #fff7de; border: 3px solid #f0c24b; border-radius: 16px; padding: 14px 28px; font-size: 32px; margin-bottom: 18px; }
+  .ask b { color: #a06b00; font-size: 24px; letter-spacing: .08em; text-transform: uppercase; margin-right: 14px; }
+
+  svg { display: block; }
+  svg text { font-family: var(--font); fill: var(--ink); }
+  .tt { font-size: 34px; font-weight: 800; }
+  .ts { font-size: 24px; fill: var(--muted) !important; }
+  .td { font-size: 23px; font-weight: 600; }
+  .tl { font-size: 28px; font-weight: 600; paint-order: stroke; stroke: var(--bg); stroke-width: 10px; stroke-linejoin: round; }
+  .tm { font-size: 22px; fill: var(--muted) !important; letter-spacing: .06em; text-transform: uppercase; font-weight: 700; }
+  div.tm { color: var(--muted); }
+  .nI { fill: var(--issuer-bg); stroke: var(--issuer); stroke-width: 4; }
+  .nH { fill: var(--holder-bg); stroke: var(--holder); stroke-width: 4; }
+  .nV { fill: var(--verifier-bg); stroke: var(--verifier); stroke-width: 4; }
+  .nT { fill: var(--trust-bg); stroke: var(--trust); stroke-width: 4; }
+  .nN { fill: #fff; stroke: #8a99b0; stroke-width: 4; }
+  .panel { fill: #fff; stroke: var(--line); stroke-width: 3; }
+  .ln { stroke: var(--ink); stroke-width: 5; fill: none; }
+  .lnd { stroke: #6b7b93; stroke-width: 5; fill: none; stroke-dasharray: 14 10; }
+  .lnt { stroke: var(--trust); stroke-width: 4; fill: none; stroke-dasharray: 3 9; stroke-linecap: round; }
+  .cross { font-size: 72px; font-weight: 800; fill: var(--warn) !important; stroke: none; }
+
+  .fh { opacity: 0; visibility: hidden; }
+  [data-from], [data-to] { transition: opacity .35s ease; }
+
+  .msg .mline { stroke: var(--ink); stroke-width: 4; fill: none; }
+  .msg .n { font-weight: 800; fill: var(--issuer) !important; }
+  .msg.cur .mline { stroke: var(--verifier); stroke-width: 7; }
+  .msg.cur .mlab { fill: var(--verifier) !important; font-weight: 800; }
+
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  .grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 26px; }
+  .card { background: var(--card); border: 3px solid var(--line); border-radius: 20px; padding: 22px 28px; }
+  .card h3 { margin: 0 0 8px; font-size: 40px; font-weight: 800; }
+  .card p { margin: 0; font-size: 28px; line-height: 1.3; color: #26384f; }
+  .card .k { font-size: 21px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; margin-bottom: 8px; }
+  .c-i { border-color: var(--issuer); background: var(--issuer-bg); } .c-i .k { color: var(--issuer); }
+  .c-h { border-color: var(--holder); background: var(--holder-bg); } .c-h .k { color: var(--holder); }
+  .c-v { border-color: var(--verifier); background: var(--verifier-bg); } .c-v .k { color: var(--verifier); }
+  .c-t { border-color: var(--trust); background: var(--trust-bg); } .c-t .k { color: var(--trust); }
+  .c-w { border-color: var(--warn); background: var(--warn-bg); } .c-w .k { color: var(--warn); }
+  .c-n { background: #eef1f6; border-style: dashed; } .c-n .k { color: var(--muted); }
+
+  .word h3 { font-size: 46px; }
+  .more { margin-top: 26px; font-size: 28px; color: var(--muted); }
+
+  .layers { display: grid; gap: 14px; margin-bottom: 20px; }
+  .layer { display: grid; grid-template-columns: 330px 1fr 1fr; align-items: center; gap: 22px; background: #fff;
+    border: 3px solid var(--line); border-left-width: 14px; border-radius: 14px; padding: 16px 24px; font-size: 30px; }
+  .layer b { font-size: 34px; }
+  .layer .ex { color: var(--muted); font-size: 26px; }
+  .l1 { border-left-color: var(--warn); } .l2 { border-left-color: var(--issuer); } .l3 { border-left-color: var(--holder); }
+  .l4 { border-left-color: var(--trust); } .l5 { border-left-color: var(--verifier); }
+
+  .two { display: grid; grid-template-columns: 230px 1fr 1fr; gap: 12px 18px; align-items: stretch; }
+  .two .hd { border-radius: 16px; padding: 12px 24px; font-size: 36px; font-weight: 800; text-align: center; border: 4px solid; }
+  .two .hd.a { border-color: var(--issuer); background: var(--issuer-bg); }
+  .two .hd.p { border-color: var(--verifier); background: var(--verifier-bg); }
+  .two .lab { font-size: 22px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); align-self: center; }
+  .two .c { background: #fff; border: 3px solid var(--line); border-radius: 16px; padding: 12px 20px; font-size: 27px; line-height: 1.25; }
+  .two .c.key { border-color: var(--warn); background: var(--warn-bg); }
+  .two .c.same { grid-column: 2 / span 2; text-align: center; background: #eef1f6; border-style: dashed; }
+  .bignum { display: flex; align-items: baseline; gap: 30px; margin: 0 0 20px; white-space: nowrap; }
+  .bignum .v { font-size: 150px; font-weight: 800; line-height: 1; color: var(--issuer); }
+  .bignum .u { font-size: 34px; color: var(--muted); }
+  .bignum .v2 { font-size: 110px; font-weight: 800; line-height: 1; color: var(--trust); }
+
+  .code { background: #0f1b2d; color: #e7eefb; border-radius: 18px; padding: 24px 30px; font-family: "Cascadia Mono", "DejaVu Sans Mono", Consolas, monospace;
+    font-size: 27px; line-height: 1.5; white-space: pre; }
+  .code .c { color: #8fa4c4; }
+  .code .hd { background: #b45f06; border-radius: 6px; padding: 0 8px; color: #fff; }
+  .code .hs { background: #0f8a8a; border-radius: 6px; padding: 0 8px; color: #fff; }
+  .code .ok { color: #7ee0a8; }
+  .disc { font-family: "Cascadia Mono", "DejaVu Sans Mono", Consolas, monospace; font-size: 26px; border-radius: 14px; padding: 16px 20px; border: 4px solid; background: #fff; }
+  .disc.d { border-color: #b45f06; } .disc.s { border-color: #0f8a8a; }
+  .disc small { display: block; font-family: var(--font); font-size: 22px; color: var(--muted); margin-top: 6px; }
+  .wire { display: flex; align-items: center; gap: 12px; font-size: 28px; flex-wrap: wrap; }
+  .wire span { border-radius: 12px; padding: 12px 18px; border: 3px solid; background: #fff; font-weight: 700; }
+  .wire .jwt { border-color: var(--issuer); } .wire .dd { border-color: #b45f06; } .wire .kb { border-color: var(--holder); }
+  .wire i { font-style: normal; font-size: 40px; font-weight: 800; color: var(--muted); }
+  .hidden-note { color: var(--warn); font-weight: 700; font-size: 28px; }
+  .bit { background: #fff; border: 3px solid var(--line); border-radius: 10px; text-align: center; padding: 8px 0; font-size: 34px; font-weight: 800; }
+  .bit small { display: block; font-size: 18px; font-weight: 600; color: var(--muted); }
+  .bit.rev { background: var(--warn-bg); border-color: var(--warn); color: var(--warn); }
+  .bit.me { box-shadow: 0 0 0 5px var(--issuer); border-color: var(--issuer); }
+
+  .bar { position: absolute; left: 0; bottom: 0; height: 8px; background: var(--issuer); width: 0; transition: width .2s; z-index: 5; }
+  .foot { position: absolute; left: 110px; right: 110px; bottom: 16px; display: flex; justify-content: space-between;
+    color: var(--muted); font-size: 21px; z-index: 5; }
+  .help { position: fixed; inset: 0; background: rgba(8,14,24,.92); display: none; align-items: center; justify-content: center; z-index: 10; }
+  .help.show { display: flex; }
+  .help div { background: #fff; color: var(--ink); padding: 30px 40px; border-radius: 14px; font-size: 22px; line-height: 1.9; }
+  .help kbd { background: #eef1f6; border: 1px solid var(--line); border-radius: 5px; padding: 1px 8px; }
+
+  .title-slide { justify-content: center; align-items: flex-start; }
+  .title-slide .big { font-size: 110px; font-weight: 800; line-height: 1.05; margin-bottom: 30px; }
+  .title-slide .sub { font-size: 40px; color: var(--muted); }
+  .title-slide .stripe { width: 220px; height: 14px; background: linear-gradient(90deg, var(--issuer), var(--holder), var(--verifier)); border-radius: 7px; margin-bottom: 40px; }
+
+  body.overview { overflow: auto; background: #cfd8e6; }
+  body.overview .stage { position: static; transform: none !important; height: auto; background: transparent; overflow: visible; }
+  body.overview .slide { position: relative; display: flex !important; inset: auto; width: 1920px; height: 1080px; margin: 0 0 30px; background: var(--bg);
+    box-shadow: 0 4px 20px rgba(0,0,0,.25); }
+  body.overview .slide.hidden { display: none !important; }
+  body.overview .fh { opacity: 1 !important; visibility: visible !important; }
+  body.overview .bar, body.overview .foot { display: none; }
+
+  @page { size: 13.333in 7.5in; margin: 0; }
+  @media print {
+    html, body { background: #fff; overflow: visible; height: auto; }
+    .stage { position: static; transform: none !important; zoom: .6667; height: auto; overflow: visible; }
+    .slide { position: relative; display: flex !important; inset: auto; width: 1920px; height: 1080px; page-break-after: always; break-after: page; }
+    .slide.hidden { display: none !important; }
+    .fh { opacity: 1 !important; visibility: visible !important; }
+    .bar, .foot, .help { display: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <marker id="ahK" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#0b1f3a"/></marker>
+  <marker id="ahG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#6b7b93"/></marker>
+</defs></svg>
+
+<div class="stage" id="stage">
+
+<!-- Title -->
+<section class="slide title-slide" data-title="Title" data-full="0" data-short="0" data-always="1">
+  <img class="logo-big" src="sunet-logo.svg" alt="SUNET">
+  <div class="stripe"></div>
+  <div class="big">Trusted lists and<br>OpenID Federation</div>
+  <div class="sub">Two ways to decide whom to trust. Take-home: handout.md</div>
+  <aside class="notes"><p data-l="Tip">Press ? for the shortcuts. Press P for the presenter view with your notes. Press S to switch between 60 and 30 minutes.</p></aside>
+</section>
+
+<!-- 1 -->
+<section class="slide" data-title="Why a trusted list" data-full="3" data-short="2" data-s="1" data-steps="3">
+  <div class="meta"><span>Handout section 3</span><span>Slide 1 &middot; 3 min <span class="tag-s">S</span></span></div>
+  <h1><span class="num">1</span>Part 1. Why a trusted list</h1>
+  <div class="ask"><b>Problem</b>A signature proves that a key signed. It does not prove that you should believe the owner of the key.</div>
+  <svg viewBox="0 0 1700 360" width="1700">
+    <g data-from="1">
+      <rect class="nT" x="0" y="90" width="440" height="170" rx="22"/>
+      <text class="tt" x="220" y="160" text-anchor="middle">Authority</text>
+      <text class="ts" x="220" y="204" text-anchor="middle">a Member State, the Commission</text>
+      <line class="ln" x1="446" y1="175" x2="624" y2="175" marker-end="url(#ahK)"/>
+      <text class="tl" x="535" y="140" text-anchor="middle">publishes</text>
+      <rect class="nN" x="630" y="60" width="440" height="230" rx="22"/>
+      <text class="tt" x="850" y="130" text-anchor="middle">Signed list</text>
+      <text class="ts" x="850" y="176" text-anchor="middle">who is trusted</text>
+      <text class="td" x="850" y="226" text-anchor="middle">plus the keys to check them</text>
+    </g>
+    <g data-from="2">
+      <line class="ln" x1="1076" y1="175" x2="1254" y2="175" marker-end="url(#ahK)"/>
+      <text class="tl" x="1165" y="100" text-anchor="middle">downloads,</text>
+      <text class="tl" x="1165" y="136" text-anchor="middle">checks</text>
+      <rect class="nV" x="1260" y="90" width="440" height="170" rx="22"/>
+      <text class="tt" x="1480" y="160" text-anchor="middle">Verifier</text>
+      <text class="ts" x="1480" y="204" text-anchor="middle">wallet, issuer, service</text>
+    </g>
+  </svg>
+  <div class="take" data-from="3"><b>Takeaway</b>Trust is not in the signature. It is in the list that the signature is checked against.</div>
+  <aside class="notes">
+    <p data-l="Say">Any key can sign. The question is whose key it is. A trusted list answers that with one signed document.</p>
+    <p data-l="Ask">"How do you decide today that a certificate is from the right party?"</p>
+    <p data-l="Takeaway">Part 1 is about the list. Part 2 is about a different answer to the same question.</p>
+  </aside>
+</section>
+
+<!-- 2 -->
+<section class="slide" data-title="Three lists" data-full="5" data-short="3" data-s="1" data-steps="4">
+  <div class="meta"><span>Handout section 3</span><span>Slide 2 &middot; 5 min <span class="tag-s">S</span></span></div>
+  <h1><span class="num">2</span>Trusted lists: three kinds</h1>
+  <div class="grid3">
+    <div class="card c-v" data-from="1">
+      <div class="k">Trusted List</div>
+      <h3>One per Member State</h3>
+      <p>ETSI TS 119 612. Lists trust service providers and their services. In the wallet world it carries the anchors of QEAA providers.</p>
+    </div>
+    <div class="card c-t" data-from="2">
+      <div class="k">LOTL</div>
+      <h3>The index</h3>
+      <p>List Of Trusted Lists, run by the Commission. Same format. Points to every national list and to the certificates that sign them.</p>
+    </div>
+    <div class="card c-i" data-from="3">
+      <div class="k">LoTE</div>
+      <h3>For wallet roles</h3>
+      <p>List of Trusted Entities, ETSI TS 119 602. Commission-published anchors for PID Providers, PuB-EAA Providers, Wallet Providers and access CAs.</p>
+    </div>
+  </div>
+  <div class="take" data-from="4"><b>Takeaway</b>The LOTL finds the lists. The Trusted Lists and LoTEs hold the anchors.</div>
+  <aside class="notes">
+    <p data-l="Say">Do not mix up the LOTL, which is a list of Trusted Lists, with the LoTE, which is a list of trusted entities for the wallet.</p>
+    <p data-l="Say">Trusted Lists come from eIDAS 1. LoTEs are new for the wallet. Same idea, new roles.</p>
+    <p data-l="Check">The LoTE format details come from ETSI TS 119 602, which I could not read. The roles come from the ARF.</p>
+  </aside>
+</section>
+
+<!-- 3 -->
+<section class="slide" data-title="A real walk" data-full="5" data-short="3" data-s="1" data-steps="3">
+  <div class="meta"><span>Handout section 4</span><span>Slide 3 &middot; 5 min <span class="tag-s">S</span></span></div>
+  <h1><span class="num">3</span>Walk the real lists</h1>
+  <svg viewBox="0 0 1700 430" width="1700">
+    <g data-from="1">
+      <rect class="nT" x="0" y="40" width="460" height="270" rx="22"/>
+      <text class="tt" x="230" y="96" text-anchor="middle">EU LOTL</text>
+      <text class="ts" x="230" y="140" text-anchor="middle">ec.europa.eu/tools/lotl/</text>
+      <text class="ts" x="230" y="172" text-anchor="middle">eu-lotl.xml</text>
+      <text class="td" x="230" y="228" text-anchor="middle">43 pointers</text>
+      <text class="td" x="230" y="262" text-anchor="middle">sequence number 398</text>
+    </g>
+    <g data-from="2">
+      <line class="ln" x1="466" y1="175" x2="614" y2="175" marker-end="url(#ahK)"/>
+      <text class="tl" x="540" y="140" text-anchor="middle">points to</text>
+      <rect class="nV" x="620" y="40" width="460" height="270" rx="22"/>
+      <text class="tt" x="850" y="96" text-anchor="middle">Swedish list</text>
+      <text class="ts" x="850" y="140" text-anchor="middle">trustedlist.pts.se/</text>
+      <text class="ts" x="850" y="172" text-anchor="middle">tlv6/SE-TL.xml</text>
+      <text class="td" x="850" y="228" text-anchor="middle">operator: PTS</text>
+      <text class="td" x="850" y="262" text-anchor="middle">5 providers, 20 services</text>
+    </g>
+    <g data-from="3">
+      <line class="ln" x1="1086" y1="175" x2="1234" y2="175" marker-end="url(#ahK)"/>
+      <text class="tl" x="1160" y="140" text-anchor="middle">lists</text>
+      <rect class="nI" x="1240" y="40" width="460" height="270" rx="22"/>
+      <text class="tt" x="1470" y="96" text-anchor="middle">Service entry</text>
+      <text class="ts" x="1470" y="140" text-anchor="middle">type, status, certificate</text>
+      <text class="td" x="1470" y="212" text-anchor="middle">16 granted</text>
+      <text class="td" x="1470" y="246" text-anchor="middle">4 withdrawn</text>
+    </g>
+    <text class="tm" x="0" y="400">Figures read on 19 November 2026</text>
+  </svg>
+  <div class="take" data-from="3" style="padding:14px 28px;font-size:30px"><b>Try it</b>To check expiry and signatures of a list of lists, SUNET/vc has the <b>lol</b> tool. The handout's appendix A describes it.</div>
+  <aside class="notes">
+    <p data-l="Draw">Three boxes from left to right. Open the real files if you have a screen to spare.</p>
+    <p data-l="Say">The LOTL has 43 pointers. 32 point to XML lists, 11 to PDF copies for people. Sweden is one of them.</p>
+    <p data-l="Ask">"What would your verifier keep from the Swedish list, and what would it ignore?"</p>
+    <p data-l="Check">Numbers change. Open the two files again before you present.</p>
+  </aside>
+</section>
+
+<!-- 4 -->
+<section class="slide" data-title="Inside a Trusted List" data-full="3" data-short="0" data-steps="3">
+  <div class="meta"><span>Handout section 5</span><span>Slide 4 &middot; 3 min</span></div>
+  <h1><span class="num">4</span>Inside a Trusted List</h1>
+  <div style="display:grid;grid-template-columns:900px 1fr;gap:40px;align-items:start">
+    <div class="code" style="font-size:25px">TrustServiceStatusList
+  SchemeInformation
+    TSLType, TSLSequenceNumber
+    ListIssueDateTime, NextUpdate
+    PointersToOtherTSL     <span class="c">LOTL only</span>
+  TrustServiceProviderList
+    TrustServiceProvider
+      TSPInformation
+      TSPServices
+        TSPService
+          ServiceInformation
+            type, status, certificate
+          ServiceHistory
+  Signature              <span class="c">XAdES</span></div>
+    <div>
+      <div class="card c-i" data-from="1" style="margin-bottom:20px">
+        <div class="k">Service type</div>
+        <p>One URI per kind of service, for example <b>CA/QC</b>, <b>TSA/QTST</b> or <b>EAA/Q</b>.</p>
+      </div>
+      <div class="card c-v" data-from="2" style="margin-bottom:20px">
+        <div class="k">Status</div>
+        <p>Current: <b>granted</b> or <b>withdrawn</b>. Earlier statuses, such as <b>undersupervision</b>, stay in the history.</p>
+      </div>
+      <div class="card c-t" data-from="3">
+        <div class="k">Signature</div>
+        <p>XML signature over the whole list. The LOTL uses exclusive canonicalization and RSA with SHA-512.</p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    <p data-l="Say">The format is old and verbose. What matters is: provider, service, type, status, certificate.</p>
+    <p data-l="Say">The Swedish list even has an EAA/Q service type. The wallet era is already in the format.</p>
+    <p data-l="Check">Element names come from the live files and general TS 119 612 knowledge. Check ServiceHistory against the spec.</p>
+  </aside>
+</section>
+
+<!-- 5 -->
+<section class="slide" data-title="How a verifier uses it" data-full="3" data-short="2" data-s="1" data-steps="5">
+  <div class="meta"><span>Handout section 6</span><span>Slide 5 &middot; 3 min <span class="tag-s">S</span></span></div>
+  <h1><span class="num">5</span>Using the lists</h1>
+  <div class="layers" style="grid-template-columns:1fr">
+    <div class="layer l1" style="grid-template-columns:260px 1fr" data-from="1"><b>1. Anchor</b><span>Get the LOTL signer certificates from a source you trust, such as the Official Journal.</span></div>
+    <div class="layer l2" style="grid-template-columns:260px 1fr" data-from="2"><b>2. LOTL</b><span>Download it. Check its signature. Read the pointers.</span></div>
+    <div class="layer l3" style="grid-template-columns:260px 1fr" data-from="3"><b>3. Lists</b><span>Download each list. Check it against the signer certificate in its pointer.</span></div>
+    <div class="layer l4" style="grid-template-columns:260px 1fr" data-from="4"><b>4. Entries</b><span>Choose services by type and status. Keep their certificates as anchors.</span></div>
+    <div class="layer l5" style="grid-template-columns:260px 1fr" data-from="5"><b>5. Refresh</b><span>Download again before NextUpdate. Drop anchors whose status changed.</span></div>
+  </div>
+  <div class="take" data-from="5"><b>Takeaway</b>One anchor from outside. Everything else is checked from there.</div>
+  <aside class="notes">
+    <p data-l="Say">The verifier needs one thing from outside the system: the signer certificates for the LOTL.</p>
+    <p data-l="Say">Everything after that is a signature check. A verifier can then work from its cache.</p>
+    <p data-l="Ask">"What happens to your verifier if the list is not refreshed for a year?"</p>
+    <p data-l="Check">Step 1 is the usual practice. The exact publication place is in the Commission decision. Verify before you promise it.</p>
+  </aside>
+</section>
+
+<!-- 6 -->
+<section class="slide" data-title="Trusted lists in our code" data-full="1" data-short="0">
+  <div class="meta"><span>Handout section 7</span><span>Slide 6 &middot; 1 min</span></div>
+  <h1><span class="num">6</span>Trusted lists in SUNET/vc</h1>
+  <div class="grid3">
+    <div class="card c-t"><div class="k">Trust service</div><p>A separate service, built on go-trust, answers: is this key trusted for this role?</p></div>
+    <div class="card c-i"><div class="k">Frameworks</div><p>Named per role in the configuration. Examples in the docs: <b>etsi-tl</b>, <b>x509</b>, <b>did:web</b>, <b>openid-federation</b>.</p></div>
+    <div class="card c-v"><div class="k">Status</div><p>The repository's ARF gap analysis marks trusted list and LoTE lookup as covered.</p></div>
+  </div>
+  <div class="more">Read from the repository in November 2026. Checking lists of lists: the <b>lol</b> tool (expiry, signatures), release <b>lol-v0.1.0</b>.</div>
+  <div class="take"><b>Takeaway</b>Both ideas plug into the same question: is this key trusted for this role?</div>
+  <aside class="notes">
+    <p data-l="Say">Keep this short. The point is that the code already has a place for both mechanisms.</p>
+  </aside>
+</section>
+
+<!-- 7 -->
+<section class="slide" data-title="Federation: the idea" data-full="4" data-short="2" data-s="1" data-steps="3">
+  <div class="meta"><span>Handout section 8</span><span>Slide 7 &middot; 4 min <span class="tag-s">S</span></span></div>
+  <h1><span class="num">7</span>Part 2. OpenID Federation</h1>
+  <div class="ask"><b>Same problem</b>A verifier meets a party it has never met. Whom does it believe?</div>
+  <svg viewBox="0 0 1700 380" width="1700">
+    <g data-from="1">
+      <rect class="nH" x="0" y="60" width="540" height="220" rx="22"/>
+      <text class="tt" x="270" y="116" text-anchor="middle">op.umu.se</text>
+      <text class="ts" x="270" y="156" text-anchor="middle">a leaf entity</text>
+      <text class="td" x="270" y="206" text-anchor="middle">/.well-known/openid-federation</text>
+      <text class="td" x="270" y="240" text-anchor="middle">signs a statement about itself</text>
+    </g>
+    <g data-from="2">
+      <line class="ln" x1="546" y1="170" x2="1154" y2="170" marker-end="url(#ahK)"/>
+      <text class="tl" x="850" y="136" text-anchor="middle">authority_hints</text>
+      <rect class="nI" x="1160" y="60" width="540" height="220" rx="22"/>
+      <text class="tt" x="1430" y="116" text-anchor="middle">umu.se</text>
+      <text class="ts" x="1430" y="156" text-anchor="middle">an intermediate</text>
+      <text class="td" x="1430" y="206" text-anchor="middle">fetch endpoint</text>
+      <text class="td" x="1430" y="240" text-anchor="middle">signs a statement about op.umu.se</text>
+    </g>
+  </svg>
+  <div class="take" data-from="3"><b>Takeaway</b>No central list. Each party signs about itself. Each authority signs about those below it.</div>
+  <aside class="notes">
+    <p data-l="Say">The names come from the specification's own example. Umea University's login server, vouched for by Umea, then SWAMID, then eduGAIN.</p>
+    <p data-l="Say">The hint is only a pointer to someone who may vouch. The proof is in the signatures.</p>
+    <p data-l="Takeaway">Federation was built for exactly our world: universities, federations, many members.</p>
+  </aside>
+</section>
+
+<!-- 8 -->
+<section class="slide" data-title="Two statements" data-full="4" data-short="0" data-steps="3">
+  <div class="meta"><span>Handout section 9</span><span>Slide 8 &middot; 4 min</span></div>
+  <h1><span class="num">8</span>Two kinds of statement</h1>
+  <div class="grid2">
+    <div class="card c-h" data-from="1">
+      <div class="k">Entity Configuration: iss = sub</div>
+      <div class="code" style="font-size:25px;margin-top:10px">iss, sub        same entity
+iat, exp        short lifetime
+jwks            its federation keys
+metadata        what it is and does
+authority_hints who vouches
+trust_marks     badges it holds</div>
+    </div>
+    <div class="card c-i" data-from="2">
+      <div class="k">Subordinate Statement: iss &ne; sub</div>
+      <div class="code" style="font-size:25px;margin-top:10px">iss             the authority
+sub             the entity below
+jwks            keys of the sub
+metadata_policy rules for the sub
+constraints     limits for the sub
+source_endpoint where it came from</div>
+    </div>
+  </div>
+  <div class="take" data-from="3"><b>Takeaway</b>Both are signed JWTs, typed <span style="font-family:monospace">entity-statement+jwt</span>, signed with a key from the issuer's <span style="font-family:monospace">jwks</span>.</div>
+  <aside class="notes">
+    <p data-l="Say">The left one is a self-portrait. The right one is a reference letter from someone above.</p>
+    <p data-l="Say">Keys are in the statements. The specification avoids web PKI on purpose.</p>
+  </aside>
+</section>
+
+<!-- 9 -->
+<section class="slide" data-title="The trust chain" data-full="5" data-short="3" data-s="1" data-steps="6">
+  <div class="meta"><span>Handout section 10</span><span>Slide 9 &middot; 5 min <span class="tag-s">S</span></span></div>
+  <h1><span class="num">9</span>The trust chain</h1>
+  <div style="display:grid;grid-template-columns:900px 1fr;gap:50px;">
+    <svg viewBox="0 0 900 700" width="900">
+      <g data-from="4">
+        <rect class="nT" x="150" y="0" width="600" height="120" rx="20"/>
+        <text class="tt" x="450" y="52" text-anchor="middle">edugain.geant.org</text>
+        <text class="ts" x="450" y="92" text-anchor="middle">Trust Anchor: you already trust it</text>
+      </g>
+      <g data-from="3">
+        <rect class="nI" x="150" y="190" width="600" height="110" rx="20"/>
+        <text class="tt" x="450" y="240" text-anchor="middle">swamid.se</text>
+        <text class="ts" x="450" y="278" text-anchor="middle">Intermediate</text>
+        <line class="ln" x1="450" y1="186" x2="450" y2="124" marker-end="url(#ahK)"/>
+        <text class="tl" x="470" y="162">vouched for by</text>
+      </g>
+      <g data-from="2">
+        <rect class="nI" x="150" y="370" width="600" height="110" rx="20"/>
+        <text class="tt" x="450" y="420" text-anchor="middle">umu.se</text>
+        <text class="ts" x="450" y="458" text-anchor="middle">Intermediate</text>
+        <line class="ln" x1="450" y1="366" x2="450" y2="304" marker-end="url(#ahK)"/>
+        <text class="tl" x="470" y="342">vouched for by</text>
+      </g>
+      <g data-from="1">
+        <rect class="nH" x="150" y="550" width="600" height="130" rx="20"/>
+        <text class="tt" x="450" y="600" text-anchor="middle">op.umu.se</text>
+        <text class="ts" x="450" y="638" text-anchor="middle">Leaf: starts the chain with its</text>
+        <text class="ts" x="450" y="668" text-anchor="middle">own Entity Configuration</text>
+        <line class="ln" x1="450" y1="546" x2="450" y2="484" marker-end="url(#ahK)"/>
+        <text class="tl" x="470" y="522">vouched for by</text>
+      </g>
+    </svg>
+    <div>
+      <div class="card" style="margin-bottom:22px" data-from="2">
+        <h3>Build</h3>
+        <p>Follow authority_hints. Fetch a Subordinate Statement at each step.</p>
+      </div>
+      <div class="card c-t" style="margin-bottom:22px" data-from="5">
+        <div class="k">What the verifier holds</div>
+        <p>Only the trust anchor: its entity id and its keys, from outside the system.</p>
+      </div>
+      <div class="card c-w" data-from="6">
+        <div class="k">Checked at every link</div>
+        <p>iss of one is sub of the next. The signature fits a key in the next statement. iat is past, exp is future.</p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    <p data-l="Draw">The chain from the bottom up: op.umu.se, umu.se, swamid.se, edugain.</p>
+    <p data-l="Say">The verifier does not need the middle parties in advance. It finds them by following hints.</p>
+    <p data-l="Say">The chain's lifetime is the shortest exp of any statement in it.</p>
+    <p data-l="Ask">"Where is the one thing you must get from outside?" Answer: the anchor's keys.</p>
+  </aside>
+</section>
+
+<!-- 10 -->
+<section class="slide" data-title="Policy and constraints" data-full="3" data-short="2" data-s="1" data-steps="3">
+  <div class="meta"><span>Handout section 11</span><span>Slide 10 &middot; 3 min <span class="tag-s">S</span></span></div>
+  <h1><span class="num">10</span>Rules that flow downward</h1>
+  <div style="display:grid;grid-template-columns:900px 1fr;gap:40px;align-items:start">
+    <div class="code" style="font-size:25px">"metadata_policy": {
+  "openid_relying_party": {
+    "grant_types": {
+      "subset_of": ["authorization_code"]
+    },
+    "contacts": {
+      "add": ["helpdesk@org.example.org"]
+    }
+  }
+}</div>
+    <div>
+      <div class="card c-t" data-from="1" style="margin-bottom:20px">
+        <div class="k">Policy operators</div>
+        <p>value, add, default, one_of, subset_of, superset_of, essential.</p>
+      </div>
+      <div class="card c-w" data-from="2" style="margin-bottom:20px">
+        <div class="k">Hierarchy</div>
+        <p>No one below can loosen a policy. A conflict makes the whole chain invalid.</p>
+      </div>
+      <div class="card c-n" data-from="3">
+        <div class="k">Constraints</div>
+        <p>max_path_length, naming_constraints, allowed_entity_types.</p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    <p data-l="Say">This is what a list does not have. An authority can say what its members may claim, not only who is a member.</p>
+    <p data-l="Say">The example is from the specification, shortened.</p>
+    <p data-l="Ask">"What would SWAMID want to force on every university login server?"</p>
+  </aside>
+</section>
+
+<!-- 11 -->
+<section class="slide" data-title="Trust marks" data-full="2" data-short="0" data-steps="3">
+  <div class="meta"><span>Handout section 12</span><span>Slide 11 &middot; 2 min</span></div>
+  <h1><span class="num">11</span>Trust marks</h1>
+  <div class="ask"><b>Example from the spec</b>swamid.se issues a Sirtfi trust mark to umu.se/op.</div>
+  <div class="grid3">
+    <div class="card c-h" data-from="1"><div class="k">What</div><p>A signed badge: this entity meets a named requirement. It has a type, an issuer and a subject.</p></div>
+    <div class="card c-t" data-from="2"><div class="k">Who may issue</div><p>The trust anchor lists accepted issuers per type in <b>trust_mark_issuers</b>. An empty list means anyone.</p></div>
+    <div class="card c-v" data-from="3"><div class="k">Still valid?</div><p>Check exp, or ask the issuer's status endpoint: active, expired, revoked or invalid.</p></div>
+  </div>
+  <aside class="notes">
+    <p data-l="Say">Trust marks add a second layer: not only who you are, but what you comply with.</p>
+  </aside>
+</section>
+
+<!-- 12 -->
+<section class="slide" data-title="Federation in our code" data-full="1" data-short="0">
+  <div class="meta"><span>Handout section 13</span><span>Slide 12 &middot; 1 min</span></div>
+  <h1><span class="num">12</span>Federation in SUNET/vc</h1>
+  <div class="grid3">
+    <div class="card c-v"><div class="k">Publishing</div><p>The verifier and apigw can publish an Entity Configuration.</p></div>
+    <div class="card c-t"><div class="k">Trust decisions</div><p>The trust service has an <b>openid-federation</b> framework next to <b>etsi-tl</b>.</p></div>
+    <div class="card c-n"><div class="k">Both</div><p>SUNET/vc supports trusted lists and OpenID Federation.</p></div>
+  </div>
+  <div class="more">Read from the repository in November 2026.</div>
+  <aside class="notes">
+    <p data-l="Say">Short and casual. SUNET/vc already has support for both mechanisms.</p>
+  </aside>
+</section>
+
+<!-- 13 -->
+<section class="slide" data-title="Compare: shape" data-full="3" data-short="3" data-s="1" data-steps="3">
+  <div class="meta"><span>Handout section 14</span><span>Slide 13 &middot; 3 min <span class="tag-s">S</span></span></div>
+  <h1><span class="num x">13</span>Part 3. Compare: shape</h1>
+  <div class="two">
+    <div class="lab">Aspect</div><div class="hd a">Trusted list</div><div class="hd p">OpenID Federation</div>
+    <div class="lab" data-from="1">Shape</div><div class="c key" data-from="1">One flat signed document, plus an index of such documents</div><div class="c key" data-from="1">A tree of signed statements, one per entity and per relationship</div>
+    <div class="lab" data-from="2">Format</div><div class="c" data-from="2">Trusted Lists and the LOTL: XML with XAdES. LoTEs have a JSON data model</div><div class="c" data-from="2">JWTs with JWS signatures, keys as JWKs</div>
+    <div class="lab" data-from="3">Anchor</div><div class="c" data-from="3">Signer certificates of the LOTL, from outside</div><div class="c" data-from="3">Entity id and keys of the trust anchor, from outside</div>
+  </div>
+  <aside class="notes">
+    <p data-l="Say">Same question, two shapes. One big document you download. Many small statements you collect.</p>
+    <p data-l="Say">Both need one thing from outside the system: an anchor.</p>
+  </aside>
+</section>
+
+<!-- 14 -->
+<section class="slide" data-title="Compare: who decides" data-full="2" data-short="2" data-s="1" data-steps="3">
+  <div class="meta"><span>Handout section 15</span><span>Slide 14 &middot; 2 min <span class="tag-s">S</span></span></div>
+  <h1><span class="num x">14</span>Compare: who decides</h1>
+  <div class="two">
+    <div class="lab">Aspect</div><div class="hd a">Trusted list</div><div class="hd p">OpenID Federation</div>
+    <div class="lab" data-from="1">Publisher</div><div class="c" data-from="1">Member States, and the Commission for the LOTL and LoTEs</div><div class="c" data-from="1">The federation operator, intermediates, and each entity about itself</div>
+    <div class="lab" data-from="2">Getting in</div><div class="c" data-from="2">Notification and supervision give a status in the list</div><div class="c" data-from="2">A Subordinate Statement from your immediate superior</div>
+    <div class="lab" data-from="3">Legal weight</div><div class="c key" data-from="3">eIDAS: qualified status comes from the list</div><div class="c key" data-from="3">None by itself. Each federation defines what membership means</div>
+  </div>
+  <aside class="notes">
+    <p data-l="Say">The ARF requires a verifier to check a qualified attestation against a Trusted List. That is law, not choice.</p>
+    <p data-l="Say">Federation says how parties get to know each other. What membership means is for the federation to decide.</p>
+  </aside>
+</section>
+
+<!-- 15 -->
+<section class="slide" data-title="Compare: discovery" data-full="2" data-short="0" data-steps="3">
+  <div class="meta"><span>Handout section 15</span><span>Slide 15 &middot; 2 min</span></div>
+  <h1><span class="num x">15</span>Compare: finding and caching</h1>
+  <div class="two">
+    <div class="lab">Aspect</div><div class="hd a">Trusted list</div><div class="hd p">OpenID Federation</div>
+    <div class="lab" data-from="1">Start</div><div class="c" data-from="1">The LOTL, then every national list</div><div class="c" data-from="1">The entity identifier of the party you check</div>
+    <div class="lab" data-from="2">Direction</div><div class="c" data-from="2">Top down: download all, keep the anchors</div><div class="c" data-from="2">Bottom up: build a chain for one entity on demand</div>
+    <div class="lab" data-from="3">Offline</div><div class="c" data-from="3">Works from cache until NextUpdate</div><div class="c" data-from="3">Chain is valid until the earliest exp in it</div>
+  </div>
+  <aside class="notes">
+    <p data-l="Say">Federation also has a list endpoint for top-down discovery, and a resolver endpoint that does the chain work for you.</p>
+    <p data-l="Say">Using a resolver means you trust the resolver to do the checks.</p>
+  </aside>
+</section>
+
+<!-- 16 -->
+<section class="slide" data-title="Compare: freshness and failure" data-full="3" data-short="2" data-s="1" data-steps="4">
+  <div class="meta"><span>Handout section 15</span><span>Slide 16 &middot; 3 min <span class="tag-s">S</span></span></div>
+  <h1><span class="num x">16</span>Compare: freshness and failure</h1>
+  <div class="two">
+    <div class="lab">Aspect</div><div class="hd a">Trusted list</div><div class="hd p">OpenID Federation</div>
+    <div class="lab" data-from="1">Update</div><div class="c" data-from="1">Sequence number and NextUpdate on the list</div><div class="c" data-from="1">exp on every statement. Fetch again when it nears</div>
+    <div class="lab" data-from="2">Removal</div><div class="c" data-from="2">Status changes to withdrawn. Verifiers must re-download</div><div class="c key" data-from="2">No revocation process is defined. Statements expire or are dropped</div>
+    <div class="lab" data-from="3">Keys</div><div class="c" data-from="3">New certificate in the service entry</div><div class="c" data-from="3">jwks in the statements. Optional historical keys endpoint</div>
+    <div class="lab" data-from="4">Risk</div><div class="c" data-from="4">Stale list kept in use past NextUpdate</div><div class="c" data-from="4">Unreachable endpoints. Many fake authority_hints as an attack</div>
+  </div>
+  <aside class="notes">
+    <p data-l="Say">The federation specification says it defines no revocation. It relies on frequent checks and short lifetimes.</p>
+    <p data-l="Say">For lists the risk is quiet: nothing breaks, the data just gets old.</p>
+    <p data-l="Ask">"Which failure would you notice first in production?"</p>
+  </aside>
+</section>
+
+<!-- 17 -->
+<section class="slide" data-title="Compare: expressiveness" data-full="2" data-short="0" data-steps="3">
+  <div class="meta"><span>Handout section 15</span><span>Slide 17 &middot; 2 min</span></div>
+  <h1><span class="num x">17</span>Compare: what it can say</h1>
+  <div class="two">
+    <div class="lab">Aspect</div><div class="hd a">Trusted list</div><div class="hd p">OpenID Federation</div>
+    <div class="lab" data-from="1">Content</div><div class="c" data-from="1">Provider, service type, status, certificate</div><div class="c" data-from="1">Metadata, keys, trust marks, policy, constraints</div>
+    <div class="lab" data-from="2">Rules</div><div class="c" data-from="2">Outside the list: schemes and supervision</div><div class="c key" data-from="2">Inside the statements, merged down the chain</div>
+    <div class="lab" data-from="3">Many roles</div><div class="c" data-from="3">By service type: CA, TSA, EAA and more</div><div class="c" data-from="3">By entity type. One entity may belong to several federations</div>
+  </div>
+  <aside class="notes">
+    <p data-l="Say">A list answers: is this party trusted for this kind of service. A federation can also say what the party may claim.</p>
+  </aside>
+</section>
+
+<!-- 18 -->
+<section class="slide" data-title="Compare: scale and the wallet" data-full="2" data-short="0" data-steps="3">
+  <div class="meta"><span>Handout section 15</span><span>Slide 18 &middot; 2 min</span></div>
+  <h1><span class="num x">18</span>Compare: reach and the EU wallet</h1>
+  <div class="two">
+    <div class="lab">Aspect</div><div class="hd a">Trusted list</div><div class="hd p">OpenID Federation</div>
+    <div class="lab" data-from="1">Reach</div><div class="c" data-from="1">EU-wide. 43 pointers in the LOTL today</div><div class="c" data-from="1">Per federation. eduGAIN joins federations like SWAMID</div>
+    <div class="lab" data-from="2">Wallet</div><div class="c key" data-from="2">Core of the ARF trust model: Trusted Lists and LoTEs</div><div class="c key" data-from="2">Not part of the ARF trust model as read in November 2026</div>
+    <div class="lab" data-from="3">Fit for us</div><div class="c" data-from="3">Needed to accept EU credentials and qualified providers</div><div class="c" data-from="3">Fits SWAMID-style sector trust that we already run</div>
+  </div>
+  <aside class="notes">
+    <p data-l="Say">The EU wallet is built on lists and certificates. Our sector already lives in federations. The bridge is our job.</p>
+    <p data-l="Check">The ARF statement is from chapter 6 as read on 19 November 2026. Re-check when the ARF changes.</p>
+  </aside>
+</section>
+
+<!-- 19 -->
+<section class="slide" data-title="When to use which" data-full="4" data-short="3" data-s="1" data-steps="4">
+  <div class="meta"><span>Handout section 16</span><span>Slide 19 &middot; 4 min <span class="tag-s">S</span></span></div>
+  <h1><span class="num x">19</span>Rule of thumb</h1>
+  <div class="grid3">
+    <div class="card c-i" data-from="1"><div class="k">A list fits when</div><p>Legal status matters. Parties are few and change slowly. Verifiers must run from cache.</p></div>
+    <div class="card c-v" data-from="2"><div class="k">Federation fits when</div><p>Many entities join and leave. You need rules for metadata. Registration is delegated, as in universities.</p></div>
+    <div class="card c-t" data-from="3"><div class="k">Both in one verifier</div><p>Choose the framework per role. Qualified providers by list. Sector services by federation.</p></div>
+  </div>
+  <div class="take" data-from="4"><b>Takeaway</b>A list says who is allowed. A federation also says who vouches and under which rules.</div>
+  <aside class="notes">
+    <p data-l="Say">This is a rule of thumb, not a law. The honest answer is: it depends on who carries the responsibility.</p>
+    <p data-l="Ask">"Which of our use cases needs legal weight, and which needs flexible membership?"</p>
+  </aside>
+</section>
+
+<!-- 20 -->
+<section class="slide title-slide" data-title="Questions" data-full="3" data-short="0">
+  <div class="meta"><span>&nbsp;</span><span>Slide 20 &middot; 3 min</span></div>
+  <img class="logo-big" src="sunet-logo.svg" alt="SUNET">
+  <div class="stripe"></div>
+  <div class="big">Questions</div>
+  <div class="sub">The handout is yours to keep, with commands to try both.</div>
+  <aside class="notes">
+    <p data-l="If quiet">"Where would you start: the list or the federation?"</p>
+  </aside>
+</section>
+
+<div class="bar" id="bar"></div>
+<div class="foot"><span id="pos"></span><span id="mode"></span></div>
+</div>
+
+<div class="help" id="help"><div>
+  <kbd>&rarr;</kbd> <kbd>Space</kbd> next step or slide &nbsp; <kbd>&larr;</kbd> previous<br>
+  <kbd>Home</kbd> <kbd>End</kbd> first / last slide<br>
+  <kbd>S</kbd> full version (60 min) or short version (about 30 min)<br>
+  <kbd>P</kbd> presenter view with notes (separate window)<br>
+  <kbd>B</kbd> black screen &nbsp; <kbd>F</kbd> fullscreen<br>
+  <kbd>O</kbd> overview of all slides (can be printed to PDF)<br>
+  <kbd>?</kbd> this help
+</div></div>
+
+<script>
+(function () {
+  Array.prototype.forEach.call(document.querySelectorAll('.slide:not(.title-slide)'), function (s) {
+    var i = document.createElement('img');
+    i.className = 'logo'; i.src = 'sunet-logo.svg'; i.alt = 'SUNET';
+    s.appendChild(i);
+  });
+
+  var stage = document.getElementById('stage');
+  var all = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var short = false, idx = 0, step = 0, pw = null, t0 = Date.now();
+  var bar = document.getElementById('bar'), pos = document.getElementById('pos'), modeEl = document.getElementById('mode');
+  var help = document.getElementById('help');
+
+  function inList(s) { return !short || s.getAttribute('data-s') === '1' || s.getAttribute('data-always') === '1'; }
+  function list() { return all.filter(inList); }
+  function maxStep(s) { return parseInt(s.getAttribute('data-steps'), 10) || 0; }
+  function mins(l, upto) {
+    var t = 0;
+    for (var i = 0; i < upto; i++) t += parseInt(l[i].getAttribute(short ? 'data-short' : 'data-full'), 10) || 0;
+    return t;
+  }
+  function fit() {
+    if (document.body.classList.contains('overview')) {
+      stage.style.zoom = Math.max(0.2, (window.innerWidth - 60) / 1920);
+      stage.style.left = '30px';
+      return;
+    }
+    stage.style.zoom = '';
+    stage.style.left = '50%';
+    var k = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    stage.style.transform = 'translate(-50%,-50%) scale(' + k + ')';
+  }
+  function applySteps(s) {
+    Array.prototype.forEach.call(s.querySelectorAll('[data-from],[data-to]'), function (el) {
+      var f = el.hasAttribute('data-from') ? +el.getAttribute('data-from') : 0;
+      var t = el.hasAttribute('data-to') ? +el.getAttribute('data-to') : Infinity;
+      var vis = step >= f && step <= t;
+      el.classList.toggle('fh', !vis);
+      el.classList.toggle('cur', vis && f === step && f > 0);
+    });
+  }
+  function render() {
+    var l = list();
+    if (idx >= l.length) idx = l.length - 1;
+    if (idx < 0) idx = 0;
+    all.forEach(function (s) { s.classList.remove('active'); s.classList.toggle('hidden', l.indexOf(s) < 0); });
+    var cur = l[idx];
+    cur.classList.add('active');
+    all.forEach(function (s) { if (s !== cur) Array.prototype.forEach.call(s.querySelectorAll('.fh'), function (e) { e.classList.remove('fh'); }); });
+    applySteps(cur);
+    bar.style.width = (l.length > 1 ? idx / (l.length - 1) * 100 : 100) + '%';
+    var lab = /Slide (\d+)/.exec((cur.querySelector('.meta') || {}).textContent || '');
+    pos.textContent = (idx + 1) + ' / ' + l.length + (lab ? '   (slide ' + lab[1] + ')' : '') + (maxStep(cur) ? '   step ' + step + '/' + maxStep(cur) : '');
+    modeEl.textContent = (short ? 'Short version, about 30 min' : 'Full version, 60 min') + ' \u00b7 planned time so far: ' + mins(l, idx) + ' min';
+    history.replaceState(null, '', '#' + (short ? 's' : 'f') + (idx + 1));
+    updatePresenter(cur, l);
+  }
+  function next() {
+    var l = list(), cur = l[idx];
+    if (step < maxStep(cur)) step++;
+    else if (idx < l.length - 1) { idx++; step = 0; }
+    render();
+  }
+  function prev() {
+    var l = list();
+    if (step > 0) step--;
+    else if (idx > 0) { idx--; step = maxStep(l[idx]); }
+    render();
+  }
+
+  function openPresenter() {
+    pw = window.open('', 'presenter', 'width=720,height=900');
+    if (!pw) return;
+    pw.document.open();
+    pw.document.write('<!doctype html><meta charset="utf-8"><title>Presenter view</title><style>' +
+      'body{font-family:Segoe UI,system-ui,Arial,sans-serif;margin:0;padding:22px;background:#0f1b2d;color:#e7eefb}' +
+      'h2{margin:0 0 6px;font-size:28px}.sm{color:#8fa4c4;font-size:16px}.row{display:flex;justify-content:space-between;margin-bottom:14px}' +
+      '#t{font-size:40px;font-weight:700;color:#ffb86b}p{font-size:24px;line-height:1.35;margin:0 0 14px}' +
+      'p::before{content:attr(data-l);display:block;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#7ee0a8;font-weight:700}' +
+      '#nx{margin-top:24px;border-top:1px solid #2c4a75;padding-top:12px;font-size:18px;color:#8fa4c4}</style>' +
+      '<div class="row"><div id="t">0:00</div><div class="sm" id="pl"></div></div><h2 id="ti"></h2><div class="sm" id="st"></div><div id="nt"></div><div id="nx"></div>');
+    pw.document.close();
+    t0 = Date.now();
+    render();
+  }
+  function updatePresenter(cur, l) {
+    if (!pw || pw.closed) return;
+    var d = pw.document, q = function (i) { return d.getElementById(i); };
+    if (!q('ti')) return;
+    q('ti').textContent = (idx + 1) + '. ' + cur.getAttribute('data-title');
+    q('st').textContent = maxStep(cur) ? 'Step ' + step + ' of ' + maxStep(cur) : '';
+    var nt = cur.querySelector('.notes');
+    q('nt').innerHTML = nt ? nt.innerHTML : '';
+    var nx = l[idx + 1];
+    q('nx').textContent = nx ? 'Next: ' + nx.getAttribute('data-title') : 'Last slide';
+    q('pl').textContent = 'Planned time so far: ' + mins(l, idx) + ' min';
+  }
+  setInterval(function () {
+    if (!pw || pw.closed) return;
+    var e = Math.floor((Date.now() - t0) / 1000), el = pw.document.getElementById('t');
+    if (el) el.textContent = Math.floor(e / 60) + ':' + ('0' + (e % 60)).slice(-2);
+  }, 1000);
+
+  document.addEventListener('keydown', function (ev) {
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    var k = ev.key, l = list();
+    if (k === 'ArrowRight' || k === ' ' || k === 'PageDown' || k === 'Enter') { ev.preventDefault(); next(); }
+    else if (k === 'ArrowLeft' || k === 'PageUp' || k === 'Backspace') { ev.preventDefault(); prev(); }
+    else if (k === 'Home') { idx = 0; step = 0; render(); }
+    else if (k === 'End') { idx = l.length - 1; step = maxStep(l[idx]); render(); }
+    else if (k === 's' || k === 'S') {
+      var cur = l[idx]; short = !short; var nl = list(), j = nl.indexOf(cur);
+      idx = j >= 0 ? j : 0; step = 0; render();
+    }
+    else if (k === 'p' || k === 'P') openPresenter();
+    else if (k === 'b' || k === 'B') document.body.classList.toggle('black');
+    else if (k === 'o' || k === 'O') { document.body.classList.toggle('overview'); fit(); }
+    else if (k === 'f' || k === 'F') { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen(); }
+    else if (k === '?') help.classList.toggle('show');
+    else if (k === 'Escape') { help.classList.remove('show'); document.body.classList.remove('overview', 'black'); fit(); }
+  });
+  document.addEventListener('click', function (ev) {
+    if (document.body.classList.contains('overview')) return;
+    if (help.classList.contains('show')) { help.classList.remove('show'); return; }
+    if (ev.clientX > window.innerWidth * 0.35) next(); else prev();
+  });
+  window.addEventListener('resize', fit);
+
+  var m = /^#([sf])(\d+)$/.exec(location.hash);
+  if (m) { short = m[1] === 's'; idx = parseInt(m[2], 10) - 1; }
+  fit();
+  render();
+})();
+</script>
+</body>
+</html>
