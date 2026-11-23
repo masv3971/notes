@@ -525,9 +525,14 @@ Fetch the Subordinate Statement from an authority. First read its `federation_fe
 ```bash
 AUTH=https://authority.example       # a value from authority_hints
 curl -fsSL "$AUTH/.well-known/openid-federation" -o auth.jwt
-# decode as above, then read metadata.federation_entity.federation_fetch_endpoint
-FETCH=https://authority.example/fetch   # replace with that value
-curl -fsSL "$FETCH?sub=$ENTITY" -o sub.jwt
+FETCH=$(python3 - <<'EOF'
+import base64, json
+def b64(s): return base64.urlsafe_b64decode(s + '=' * (-len(s) % 4))
+p = open('auth.jwt').read().strip().split('.')[1]
+print(json.loads(b64(p))['metadata']['federation_entity']['federation_fetch_endpoint'])
+EOF
+)
+curl -fsSL --get --data-urlencode "sub=$ENTITY" "$FETCH" -o sub.jwt
 ```
 
 This handout did not run this appendix against a live federation. The commands follow sections 3, 8 and 9 of the specification. *Check against a real entity before you teach it.*
