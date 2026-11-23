@@ -148,7 +148,7 @@
   @page { size: 13.333in 7.5in; margin: 0; }
   @media print {
     html, body { background: #fff; overflow: visible; height: auto; }
-    .stage { position: static; transform: none !important; zoom: .6667; height: auto; overflow: visible; }
+    .stage { position: static; transform: none !important; zoom: .6667 !important; height: auto; overflow: visible; }
     .slide { position: relative; display: flex !important; inset: auto; width: 1920px; height: 1080px; page-break-after: always; break-after: page; }
     .slide.hidden { display: none !important; }
     .fh { opacity: 1 !important; visibility: visible !important; }
@@ -765,6 +765,7 @@ source_endpoint where it came from</div>
       '#nx{margin-top:24px;border-top:1px solid #2c4a75;padding-top:12px;font-size:18px;color:#8fa4c4}</style>' +
       '<div class="row"><div id="t">0:00</div><div class="sm" id="pl"></div></div><h2 id="ti"></h2><div class="sm" id="st"></div><div id="nt"></div><div id="nx"></div>');
     pw.document.close();
+    pw.document.addEventListener('keydown', onKey);
     t0 = Date.now();
     render();
   }
@@ -786,9 +787,11 @@ source_endpoint where it came from</div>
     if (el) el.textContent = Math.floor(e / 60) + ':' + ('0' + (e % 60)).slice(-2);
   }, 1000);
 
-  document.addEventListener('keydown', function (ev) {
+  function onKey(ev) {
     if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
     var k = ev.key, l = list();
+    // The presenter window only navigates; P and F act on the slideshow window.
+    if (ev.currentTarget !== document && (k === 'p' || k === 'P' || k === 'f' || k === 'F')) return;
     if (k === 'ArrowRight' || k === ' ' || k === 'PageDown' || k === 'Enter') { ev.preventDefault(); next(); }
     else if (k === 'ArrowLeft' || k === 'PageUp' || k === 'Backspace') { ev.preventDefault(); prev(); }
     else if (k === 'Home') { idx = 0; step = 0; render(); }
@@ -803,7 +806,8 @@ source_endpoint where it came from</div>
     else if (k === 'f' || k === 'F') { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen(); }
     else if (k === '?') help.classList.toggle('show');
     else if (k === 'Escape') { help.classList.remove('show'); document.body.classList.remove('overview', 'black'); fit(); }
-  });
+  }
+  document.addEventListener('keydown', onKey);
   document.addEventListener('click', function (ev) {
     if (document.body.classList.contains('overview')) return;
     if (help.classList.contains('show')) { help.classList.remove('show'); return; }
