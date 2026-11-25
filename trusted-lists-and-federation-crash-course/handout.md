@@ -503,7 +503,7 @@ Fetch an Entity Configuration and read it:
 
 ```bash
 ENTITY=https://entity.example        # replace
-curl -fsSL "$ENTITY/.well-known/openid-federation" -o ec.jwt
+curl -fsSL "${ENTITY%/}/.well-known/openid-federation" -o ec.jwt
 
 # Decode header and payload (no signature check)
 python3 - <<'EOF'
@@ -524,7 +524,7 @@ Fetch the Subordinate Statement from an authority. First read its `federation_fe
 
 ```bash
 AUTH=https://authority.example       # a value from authority_hints
-curl -fsSL "$AUTH/.well-known/openid-federation" -o auth.jwt
+curl -fsSL "${AUTH%/}/.well-known/openid-federation" -o auth.jwt
 FETCH=$(python3 - <<'EOF'
 import base64, json
 def b64(s): return base64.urlsafe_b64decode(s + '=' * (-len(s) % 4))
