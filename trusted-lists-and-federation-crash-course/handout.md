@@ -187,7 +187,7 @@ flowchart TD
 
 Trust decisions in SUNET/vc go to a separate trust service, built on SUNET's go-trust. It answers: is this key trusted for this role? The configuration documentation names trust frameworks per role, with example values `etsi-tl`, `x509`, `did:web` and `openid-federation`. The repository's ARF gap analysis marks trusted list and LoTE lookup as covered.
 
-SUNET/vc also has a command-line tool, `lol`, that fetches a List of Trusted Lists, checks every list it points to for reachability and expiry, and verifies signatures against trust anchors you give it. It is described in appendix A.
+SUNET/vc also has a command-line tool, `lol`, that fetches a List of Trusted Lists, checks every list it points to for reachability and expiry, and verifies signatures against trust anchors you give it. It reads JSON LoTLs, not the EU XML LOTL. It is described in appendix A.
 
 Questions worth asking: "Which lists do we load, and how often?" "Who holds the LOTL signer certificates, and how do we update them?" "What does the verifier do when a list is past `NextUpdate`?"
 
@@ -473,6 +473,8 @@ They can live in one verifier. The trust service chooses a framework per role: q
 - what kind of list it is,
 - when it expires (`NextUpdate`),
 - and, if you give it trust anchors, whether its signature verifies.
+
+**Scope.** The LoTL itself must be JSON (the LoTE format). `lol` defaults to the WE BUILD WP4 pilot list and cannot parse the EU XML LOTL (`eu-lotl.xml`). The lists the LoTL points to can be XML or JSON.
 
 The signature check uses go-trust's own verifier, so `lol` and the trust service agree on what counts as valid.
 
