@@ -12,6 +12,10 @@ NAME                    := notes
 .PHONY: vscode gh-install gh-auth
 
 vscode: gh-install ## Set up VS Code development environment
+	$(info Installing sync-skills)
+	sudo curl -fsSL -o /usr/local/bin/sync-skills.sh https://github.com/masv3971/coding-skills/releases/latest/download/sync-skills.sh &&\
+	sudo chmod +x /usr/local/bin/sync-skills.sh
+
 
 gh-install: ## Install GitHub CLI (gh)
 	$(info Install GitHub CLI)
